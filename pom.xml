@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ToddySoft Connect MCP Server — an MCP (Model Context Protocol) server exposing
+  Apache PLC4X industrial drivers as tools for AI assistant integration.
+  Copyright (C) 2026  ToddySoft GmbH
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version. See the LICENSE file for details.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    Standard Spring Boot parent: supplies the Spring Boot dependency BOM plus managed
+    plugin configuration (compiler, surefire, spring-boot repackage). This project is
+    fully independent of the (commercial) ToddySoft Connect reactor — it builds against
+    Apache PLC4X only.
+  -->
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.4.5</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.toddysoft.connect</groupId>
+  <artifactId>toddysoft-connect-mcp-server</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>ToddySoft Connect MCP Server</name>
+  <description>
+    Spring Boot-based MCP (Model Context Protocol) server that exposes Apache PLC4X
+    industrial protocol drivers as MCP tools for AI assistant integration. GPL-licensed
+    open-source edition; see the README for the commercially-supported ToddySoft Connect
+    driver suite.
+  </description>
+  <url>https://toddysoft.com</url>
+  <inceptionYear>2026</inceptionYear>
+
+  <licenses>
+    <license>
+      <name>GNU General Public License v3.0</name>
+      <url>https://www.gnu.org/licenses/gpl-3.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- Runtime target. Spring Boot 3.x requires Java 17+. -->
+    <java.version>21</java.version>
+
+    <!-- Apache PLC4X version. When PLC4X 1.0.0 is released, drop the -SNAPSHOT so the
+         project resolves purely from Maven Central. -->
+    <plc4x.version>1.0.0-SNAPSHOT</plc4x.version>
+    <!-- Spring AI (MCP server starter). Managed via the spring-ai-bom import below. -->
+    <spring-ai.version>1.0.0</spring-ai.version>
+
+    <!-- Byte Buddy is a transitive dependency of Mockito (its inline mock-maker uses it to
+         instrument classes at test time). Spring Boot 3.4.5 manages an older Byte Buddy that
+         only supports up to Java 24, so running the tests on a JDK 25 fails with
+         "Java 25 (69) is not supported by the current version of Byte Buddy". Overriding the
+         Spring-Boot-managed `byte-buddy.version` property to a Java-25-capable release fixes it.
+         Byte Buddy is backward-compatible and maintained by the Mockito author, so bumping it
+         for newer-JDK support is the vendor-recommended fix. Drop this once the managed Spring
+         Boot version already supports the JDK you build on. -->
+    <byte-buddy.version>1.18.11</byte-buddy.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Spring AI BOM — aligns spring-ai-* versions with the MCP server starter. -->
+      <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-bom</artifactId>
+        <version>${spring-ai.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- PLC4X publishes no BOM, so every plc4j-* dependency below pins ${plc4x.version}
+           explicitly rather than importing one here. -->
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- ================= Spring AI / Spring Boot ================= -->
+    <!-- Spring AI MCP Server (stdio transport for CLI integration) -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-starter-mcp-server</artifactId>
+    </dependency>
+    <!-- Spring AI model annotations (Tool, ToolParam) used directly -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-model</artifactId>
+    </dependency>
+
+    <!-- Spring Boot core dependencies used directly -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-autoconfigure</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-beans</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.annotation</groupId>
+      <artifactId>jakarta.annotation-api</artifactId>
+    </dependency>
+
+    <!-- ================= Apache PLC4X ================= -->
+    <!-- PLC4X API for driver interaction -->
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-api</artifactId>
+      <version>${plc4x.version}</version>
+    </dependency>
+
+    <!-- PLC4X connection cache for pooled connections -->
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-connection-cache</artifactId>
+      <version>${plc4x.version}</version>
+    </dependency>
+
+    <!-- PLC4X audit log -->
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-utils-audit-log-api</artifactId>
+      <version>${plc4x.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-utils-audit-log-impl</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- PLC4X SPI values for PlcValue type conversion (runtime — drivers need PlcSTRING etc.) -->
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-spi-values</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- ================= Apache PLC4X drivers (runtime — discovered via ServiceLoader) =========== -->
+    <!-- Mirrors the driver set of the ToddySoft Connect edition. Add or remove drivers here to
+         change which protocols this server exposes; each registers org.apache.plc4x.java.api.PlcDriver. -->
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-driver-ads</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-driver-c-bus</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-driver-eip</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-driver-firmata</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-driver-knxnetip</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-driver-modbus</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-driver-opcua</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.plc4x</groupId>
+      <artifactId>plc4j-driver-s7</artifactId>
+      <version>${plc4x.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- ================= Logging ================= -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+
+    <!-- ================= Test ================= -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Repackage into an executable fat JAR (java -jar target/toddysoft-connect-mcp-server-*.jar) -->
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>

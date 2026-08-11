@@ -1,0 +1,19 @@
+spring:
+  ai:
+    mcp:
+      server:
+        name: toddysoft-connect
+        version: 1.0.0
+        type: SYNC
+        stdio: true
+  main:
+    web-application-type: none
+
+# Custom MCP server configuration
+toddysoft:
+  mcp:
+    timeout-seconds: 30
+    discovery-timeout-seconds: 30
+    cache:
+      max-idle-minutes: 5
+      max-lease-seconds: 60

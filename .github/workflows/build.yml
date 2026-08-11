@@ -1,0 +1,56 @@
+name: build
+
+# Build and test the MCP server on every push / PR to main, and on demand.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Cancel an in-progress run when a newer commit is pushed to the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 21 is the compile target (java.version in the POM); 25 is what the project is
+        # developed against locally. Both must stay green — the Byte Buddy override in the
+        # POM is what keeps the Mockito tests passing on JDK 25.
+        java: [ '21', '25' ]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          # Cache the local Maven repository keyed on the POMs.
+          cache: maven
+
+      - name: Build and test
+        # -B batch mode, -ntp no transfer progress → clean CI logs. The Maven wrapper pins
+        # the Maven version, so no separate Maven install step is needed.
+        run: ./mvnw -B -ntp verify
+
+      - name: Upload build artifact
+        # Only publish the runnable fat JAR once (from the target-JDK build), and only on a
+        # real branch push — PRs from forks should not publish artifacts.
+        if: ${{ matrix.java == '21' && github.event_name == 'push' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: toddysoft-connect-mcp-server
+          path: target/toddysoft-connect-mcp-server-*.jar
+          if-no-files-found: error
