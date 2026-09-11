@@ -18,7 +18,7 @@
  */
 package com.toddysoft.connect.java.tools.mcpserver.tools;
 
-import org.apache.plc4x.java.utils.cache.CachedPlcConnectionManager;
+import org.apache.plc4x.java.utils.cache.PlcConnectionCache;
 import com.toddysoft.connect.java.tools.mcpserver.config.McpServerProperties;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLogEventType;
@@ -42,21 +42,21 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class BrowseTool {
 
-    private final CachedPlcConnectionManager connectionManager;
+    private final PlcConnectionCache connectionCache;
     private final McpServerProperties properties;
     private final AuditLog auditLog;
 
     /**
      * Constructs a BrowseTool with the required dependencies.
      *
-     * @param connectionManager cached connection manager for PLC connections
+     * @param connectionCache pooling connection cache for PLC connections
      * @param properties        configuration properties including request timeout
      * @param auditLog          the audit log for recording tool invocations
      */
-    public BrowseTool(CachedPlcConnectionManager connectionManager,
+    public BrowseTool(PlcConnectionCache connectionCache,
                       McpServerProperties properties,
                       AuditLog auditLog) {
-        this.connectionManager = connectionManager;
+        this.connectionCache = connectionCache;
         this.properties = properties;
         this.auditLog = auditLog;
     }
@@ -85,7 +85,7 @@ public class BrowseTool {
 
         List<Map<String, Object>> results = new ArrayList<>();
 
-        try (PlcConnection connection = connectionManager.getConnection(connectionUrl)) {
+        try (PlcConnection connection = connectionCache.getConnection(connectionUrl)) {
             PlcBrowseRequest request = connection.browseRequestBuilder()
                     .addQuery("query", effectiveQuery)
                     .build();

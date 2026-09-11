@@ -54,9 +54,8 @@
     <!-- Runtime target. Spring Boot 3.x requires Java 17+. -->
     <java.version>21</java.version>
 
-    <!-- Apache PLC4X version. When PLC4X 1.0.0 is released, drop the -SNAPSHOT so the
-         project resolves purely from Maven Central. -->
-    <plc4x.version>1.0.0-SNAPSHOT</plc4x.version>
+    <!-- Apache PLC4X version: Where all the drivers come from -->
+    <plc4x.version>1.0.0</plc4x.version>
     <!-- Spring AI (MCP server starter). Managed via the spring-ai-bom import below. -->
     <spring-ai.version>1.0.0</spring-ai.version>
 
@@ -129,10 +128,11 @@
       <version>${plc4x.version}</version>
     </dependency>
 
-    <!-- PLC4X connection cache for pooled connections -->
+    <!-- PLC4X connection cache for pooled connections (renamed from plc4j-connection-cache
+         to plc4j-tools-connection-cache in PLC4X 1.0.0) -->
     <dependency>
       <groupId>org.apache.plc4x</groupId>
-      <artifactId>plc4j-connection-cache</artifactId>
+      <artifactId>plc4j-tools-connection-cache</artifactId>
       <version>${plc4x.version}</version>
     </dependency>
 
@@ -159,16 +159,12 @@
 
     <!-- ================= Apache PLC4X drivers (runtime — discovered via ServiceLoader) =========== -->
     <!-- Mirrors the driver set of the ToddySoft Connect edition. Add or remove drivers here to
-         change which protocols this server exposes; each registers org.apache.plc4x.java.api.PlcDriver. -->
+         change which protocols this server exposes; each registers org.apache.plc4x.java.api.PlcDriver.
+         Note: PLC4X 1.0.0 does not publish the c-bus, bacnet, ctrlx, open-protocol and profinet
+         drivers (maven.deploy.skip in their POMs), so they cannot be depended on from Central. -->
     <dependency>
       <groupId>org.apache.plc4x</groupId>
       <artifactId>plc4j-driver-ads</artifactId>
-      <version>${plc4x.version}</version>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.plc4x</groupId>
-      <artifactId>plc4j-driver-c-bus</artifactId>
       <version>${plc4x.version}</version>
       <scope>runtime</scope>
     </dependency>
@@ -238,24 +234,6 @@
     </dependency>
   </dependencies>
 
-  <repositories>
-    <!-- PLC4X 1.0.0 is not released yet, so the plc4j-* artifacts only exist as snapshots on
-         Apache's repository. A local build works without this because the snapshots are in
-         ~/.m2 from a local PLC4X build; CI starts empty and needs the repo declared.
-         Remove this block once ${plc4x.version} points at a release on Maven Central. -->
-    <repository>
-      <id>apache-snapshots</id>
-      <name>Apache Snapshot Repository</name>
-      <url>https://repository.apache.org/content/repositories/snapshots</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-        <updatePolicy>daily</updatePolicy>
-      </snapshots>
-    </repository>
-  </repositories>
 
   <build>
     <plugins>

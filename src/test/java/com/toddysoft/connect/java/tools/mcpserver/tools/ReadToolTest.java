@@ -18,7 +18,7 @@
  */
 package com.toddysoft.connect.java.tools.mcpserver.tools;
 
-import org.apache.plc4x.java.utils.cache.CachedPlcConnectionManager;
+import org.apache.plc4x.java.utils.cache.PlcConnectionCache;
 import com.toddysoft.connect.java.tools.mcpserver.config.McpServerProperties;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLogEventType;
@@ -52,7 +52,7 @@ import static org.mockito.Mockito.doReturn;
 class ReadToolTest {
 
     @Mock
-    private CachedPlcConnectionManager connectionManager;
+    private PlcConnectionCache connectionCache;
 
     @Mock
     private McpServerProperties properties;
@@ -76,7 +76,7 @@ class ReadToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new ReadTool(connectionManager, properties, auditLog);
+        tool = new ReadTool(connectionCache, properties, auditLog);
     }
 
     /**
@@ -87,7 +87,7 @@ class ReadToolTest {
     void readTags_singleTagOk_returnsValueAndStatus() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.readRequestBuilder()).thenReturn(readBuilder);
         when(readBuilder.addTagAddress(anyString(), anyString())).thenReturn(readBuilder);
         when(readBuilder.build()).thenReturn(readRequest);
@@ -122,7 +122,7 @@ class ReadToolTest {
     void readTags_multipleTags_returnsAllResults() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.readRequestBuilder()).thenReturn(readBuilder);
         when(readBuilder.addTagAddress(anyString(), anyString())).thenReturn(readBuilder);
         when(readBuilder.build()).thenReturn(readRequest);
@@ -163,7 +163,7 @@ class ReadToolTest {
     void readTags_tagNotFound_returnsStatusOnly() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.readRequestBuilder()).thenReturn(readBuilder);
         when(readBuilder.addTagAddress(anyString(), anyString())).thenReturn(readBuilder);
         when(readBuilder.build()).thenReturn(readRequest);
@@ -189,7 +189,7 @@ class ReadToolTest {
     @Test
     void readTags_connectionFailure_returnsError() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
-        when(connectionManager.getConnection("s7://unreachable"))
+        when(connectionCache.getConnection("s7://unreachable"))
                 .thenThrow(new PlcConnectionException("Connection refused"));
 
         List<Map<String, Object>> result = tool.readTags("s7://unreachable",
@@ -207,7 +207,7 @@ class ReadToolTest {
     void readTags_auditLogEnabled_logsRequestAndResponse() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection(anyString())).thenReturn(connection);
+        when(connectionCache.getConnection(anyString())).thenReturn(connection);
         when(connection.readRequestBuilder()).thenReturn(readBuilder);
         when(readBuilder.addTagAddress(anyString(), anyString())).thenReturn(readBuilder);
         when(readBuilder.build()).thenReturn(readRequest);
@@ -228,7 +228,7 @@ class ReadToolTest {
     @Test
     void readTags_connectionFailure_logsError() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
-        when(connectionManager.getConnection(anyString()))
+        when(connectionCache.getConnection(anyString()))
                 .thenThrow(new PlcConnectionException("Timeout"));
 
         tool.readTags("s7://unreachable", List.of("tag1"));
@@ -242,7 +242,7 @@ class ReadToolTest {
     @Test
     void readTags_auditLogDisabled_doesNotLog() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
-        when(connectionManager.getConnection(anyString()))
+        when(connectionCache.getConnection(anyString()))
                 .thenThrow(new PlcConnectionException("fail"));
 
         tool.readTags("s7://192.168.1.1", List.of("tag1"));

@@ -18,7 +18,7 @@
  */
 package com.toddysoft.connect.java.tools.mcpserver.tools;
 
-import org.apache.plc4x.java.utils.cache.CachedPlcConnectionManager;
+import org.apache.plc4x.java.utils.cache.PlcConnectionCache;
 import com.toddysoft.connect.java.tools.mcpserver.config.McpServerProperties;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLogEventType;
@@ -52,7 +52,7 @@ import static org.mockito.Mockito.*;
 class BrowseToolTest {
 
     @Mock
-    private CachedPlcConnectionManager connectionManager;
+    private PlcConnectionCache connectionCache;
 
     @Mock
     private McpServerProperties properties;
@@ -76,7 +76,7 @@ class BrowseToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new BrowseTool(connectionManager, properties, auditLog);
+        tool = new BrowseTool(connectionCache, properties, auditLog);
     }
 
     /**
@@ -110,7 +110,7 @@ class BrowseToolTest {
     void browseTags_returnsTagItems() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.browseRequestBuilder()).thenReturn(browseBuilder);
         when(browseBuilder.addQuery(anyString(), anyString())).thenReturn(browseBuilder);
         when(browseBuilder.build()).thenReturn(browseRequest);
@@ -141,7 +141,7 @@ class BrowseToolTest {
     void browseTags_withChildren_returnsHierarchy() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.browseRequestBuilder()).thenReturn(browseBuilder);
         when(browseBuilder.addQuery(anyString(), anyString())).thenReturn(browseBuilder);
         when(browseBuilder.build()).thenReturn(browseRequest);
@@ -180,7 +180,7 @@ class BrowseToolTest {
     void browseTags_nullQuery_defaultsToWildcard() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.browseRequestBuilder()).thenReturn(browseBuilder);
         when(browseBuilder.addQuery(eq("query"), eq("*"))).thenReturn(browseBuilder);
         when(browseBuilder.build()).thenReturn(browseRequest);
@@ -202,7 +202,7 @@ class BrowseToolTest {
     void browseTags_nonOkResponseCode_returnsError() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.browseRequestBuilder()).thenReturn(browseBuilder);
         when(browseBuilder.addQuery(anyString(), anyString())).thenReturn(browseBuilder);
         when(browseBuilder.build()).thenReturn(browseRequest);
@@ -222,7 +222,7 @@ class BrowseToolTest {
     @Test
     void browseTags_connectionFailure_returnsError() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
-        when(connectionManager.getConnection("s7://unreachable"))
+        when(connectionCache.getConnection("s7://unreachable"))
                 .thenThrow(new PlcConnectionException("Host unreachable"));
 
         List<Map<String, Object>> result = tool.browseTags("s7://unreachable", "*");
@@ -239,7 +239,7 @@ class BrowseToolTest {
     void browseTags_auditLogEnabled_logsRequestAndResponse() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection(anyString())).thenReturn(connection);
+        when(connectionCache.getConnection(anyString())).thenReturn(connection);
         when(connection.browseRequestBuilder()).thenReturn(browseBuilder);
         when(browseBuilder.addQuery(anyString(), anyString())).thenReturn(browseBuilder);
         when(browseBuilder.build()).thenReturn(browseRequest);
@@ -261,7 +261,7 @@ class BrowseToolTest {
     @Test
     void browseTags_connectionFailure_logsError() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
-        when(connectionManager.getConnection(anyString()))
+        when(connectionCache.getConnection(anyString()))
                 .thenThrow(new PlcConnectionException("Refused"));
 
         tool.browseTags("s7://unreachable", "*");
@@ -275,7 +275,7 @@ class BrowseToolTest {
     @Test
     void browseTags_auditLogDisabled_doesNotLog() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
-        when(connectionManager.getConnection(anyString()))
+        when(connectionCache.getConnection(anyString()))
                 .thenThrow(new PlcConnectionException("fail"));
 
         tool.browseTags("s7://192.168.1.1", "*");

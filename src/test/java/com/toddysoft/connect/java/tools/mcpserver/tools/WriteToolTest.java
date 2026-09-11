@@ -18,7 +18,7 @@
  */
 package com.toddysoft.connect.java.tools.mcpserver.tools;
 
-import org.apache.plc4x.java.utils.cache.CachedPlcConnectionManager;
+import org.apache.plc4x.java.utils.cache.PlcConnectionCache;
 import com.toddysoft.connect.java.tools.mcpserver.config.McpServerProperties;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLogEventType;
@@ -49,7 +49,7 @@ import static org.mockito.Mockito.*;
 class WriteToolTest {
 
     @Mock
-    private CachedPlcConnectionManager connectionManager;
+    private PlcConnectionCache connectionCache;
 
     @Mock
     private McpServerProperties properties;
@@ -73,7 +73,7 @@ class WriteToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new WriteTool(connectionManager, properties, auditLog);
+        tool = new WriteTool(connectionCache, properties, auditLog);
     }
 
     /**
@@ -84,7 +84,7 @@ class WriteToolTest {
     void writeTags_singleTagOk_returnsOkStatus() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.writeRequestBuilder()).thenReturn(writeBuilder);
         when(writeBuilder.addTagAddress(anyString(), anyString(), any())).thenReturn(writeBuilder);
         when(writeBuilder.build()).thenReturn(writeRequest);
@@ -112,7 +112,7 @@ class WriteToolTest {
     void writeTags_multipleTags_returnsAllResults() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.writeRequestBuilder()).thenReturn(writeBuilder);
         when(writeBuilder.addTagAddress(anyString(), anyString(), any())).thenReturn(writeBuilder);
         when(writeBuilder.build()).thenReturn(writeRequest);
@@ -143,7 +143,7 @@ class WriteToolTest {
     void writeTags_tagWriteFailure_returnsFailureStatus() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.writeRequestBuilder()).thenReturn(writeBuilder);
         when(writeBuilder.addTagAddress(anyString(), anyString(), any())).thenReturn(writeBuilder);
         when(writeBuilder.build()).thenReturn(writeRequest);
@@ -168,7 +168,7 @@ class WriteToolTest {
     @Test
     void writeTags_connectionFailure_returnsError() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
-        when(connectionManager.getConnection("s7://unreachable"))
+        when(connectionCache.getConnection("s7://unreachable"))
                 .thenThrow(new PlcConnectionException("Connection refused"));
 
         Map<String, Object> tags = new LinkedHashMap<>();
@@ -188,7 +188,7 @@ class WriteToolTest {
     void writeTags_auditLogEnabled_logsRequestAndResponse() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection(anyString())).thenReturn(connection);
+        when(connectionCache.getConnection(anyString())).thenReturn(connection);
         when(connection.writeRequestBuilder()).thenReturn(writeBuilder);
         when(writeBuilder.addTagAddress(anyString(), anyString(), any())).thenReturn(writeBuilder);
         when(writeBuilder.build()).thenReturn(writeRequest);
@@ -209,7 +209,7 @@ class WriteToolTest {
     @Test
     void writeTags_connectionFailure_logsError() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
-        when(connectionManager.getConnection(anyString()))
+        when(connectionCache.getConnection(anyString()))
                 .thenThrow(new PlcConnectionException("Timeout"));
 
         tool.writeTags("s7://unreachable", Map.of("tag1", 42));
@@ -223,7 +223,7 @@ class WriteToolTest {
     @Test
     void writeTags_auditLogDisabled_doesNotLog() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
-        when(connectionManager.getConnection(anyString()))
+        when(connectionCache.getConnection(anyString()))
                 .thenThrow(new PlcConnectionException("fail"));
 
         tool.writeTags("s7://192.168.1.1", Map.of("tag1", 42));
@@ -239,7 +239,7 @@ class WriteToolTest {
     void writeTags_stringValue_passedToBuilder() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getTimeoutSeconds()).thenReturn(30);
-        when(connectionManager.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
         when(connection.writeRequestBuilder()).thenReturn(writeBuilder);
         when(writeBuilder.addTagAddress(anyString(), anyString(), any())).thenReturn(writeBuilder);
         when(writeBuilder.build()).thenReturn(writeRequest);

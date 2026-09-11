@@ -18,7 +18,7 @@
  */
 package com.toddysoft.connect.java.tools.mcpserver.config;
 
-import org.apache.plc4x.java.utils.cache.CachedPlcConnectionManager;
+import org.apache.plc4x.java.utils.cache.PlcConnectionCache;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +38,7 @@ class McpServerConfigurationTest {
     @Test
     void cachedPlcConnectionManager_createsWithDefaultProperties() {
         McpServerProperties properties = new McpServerProperties();
-        CachedPlcConnectionManager manager = configuration.cachedPlcConnectionManager(properties);
+        PlcConnectionCache manager = configuration.plcConnectionCache(properties);
 
         assertNotNull(manager);
     }
@@ -49,7 +49,7 @@ class McpServerConfigurationTest {
         properties.getCache().setMaxIdleMinutes(10);
         properties.getCache().setMaxLeaseSeconds(120);
 
-        CachedPlcConnectionManager manager = configuration.cachedPlcConnectionManager(properties);
+        PlcConnectionCache manager = configuration.plcConnectionCache(properties);
 
         assertNotNull(manager);
     }
@@ -65,7 +65,7 @@ class McpServerConfigurationTest {
     @Test
     void cleanup_closesManagerAndLog() {
         McpServerProperties properties = new McpServerProperties();
-        configuration.cachedPlcConnectionManager(properties);
+        configuration.plcConnectionCache(properties);
         configuration.auditLog();
 
         // Should not throw

@@ -18,7 +18,7 @@
  */
 package com.toddysoft.connect.java.tools.mcpserver.config;
 
-import org.apache.plc4x.java.utils.cache.CachedPlcConnectionManager;
+import org.apache.plc4x.java.utils.cache.PlcConnectionCache;
 import com.toddysoft.connect.java.tools.mcpserver.tools.*;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import jakarta.annotation.PreDestroy;
@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Spring configuration that creates the core infrastructure beans for the MCP server.
  *
- * <p>Provides a {@link CachedPlcConnectionManager} for pooled PLC connections and an
+ * <p>Provides a {@link PlcConnectionCache} for pooled PLC connections and an
  * {@link AuditLog} for logging all MCP tool invocations. Both beans are configured
  * from {@link McpServerProperties} and cleaned up on application shutdown.</p>
  */
@@ -46,7 +46,7 @@ public class McpServerConfiguration {
 
     private static final Logger logger = LoggerFactory.getLogger(McpServerConfiguration.class);
 
-    private CachedPlcConnectionManager connectionManager;
+    private PlcConnectionCache connectionCache;
     private AuditLog auditLog;
 
     /**
@@ -56,16 +56,16 @@ public class McpServerConfiguration {
      * idle timeout and lease timeout from the application properties.</p>
      *
      * @param properties the MCP server configuration properties
-     * @return a configured connection manager
+     * @return a configured connection cache
      */
     @Bean
-    public CachedPlcConnectionManager cachedPlcConnectionManager(McpServerProperties properties) {
-        connectionManager = CachedPlcConnectionManager.getBuilder()
-            .withConnectionManager(PlcDriverManager.getDefault().getConnectionManager())
+    public PlcConnectionCache plcConnectionCache(McpServerProperties properties) {
+        connectionCache = PlcConnectionCache.getBuilder()
+            .withConnectionFactory(PlcDriverManager.getDefault().getConnectionFactory())
             .withMaxIdleTime(properties.getCache().getMaxIdleMinutes(), TimeUnit.MINUTES)
             .withMaxLeaseTime(properties.getCache().getMaxLeaseSeconds(), TimeUnit.SECONDS)
             .build();
-        return connectionManager;
+        return connectionCache;
     }
 
     /**
@@ -110,11 +110,11 @@ public class McpServerConfiguration {
      */
     @PreDestroy
     public void cleanup() {
-        if (connectionManager != null) {
+        if (connectionCache != null) {
             try {
-                connectionManager.close();
+                connectionCache.close();
             } catch (Exception e) {
-                logger.warn("Error closing connection manager", e);
+                logger.warn("Error closing connection cache", e);
             }
         }
         if (auditLog != null) {
