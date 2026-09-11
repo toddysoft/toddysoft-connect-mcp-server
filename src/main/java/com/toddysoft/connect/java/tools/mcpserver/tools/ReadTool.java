@@ -20,6 +20,7 @@ package com.toddysoft.connect.java.tools.mcpserver.tools;
 
 import org.apache.plc4x.java.utils.cache.PlcConnectionCache;
 import com.toddysoft.connect.java.tools.mcpserver.config.McpServerProperties;
+import com.toddysoft.connect.java.tools.mcpserver.util.PlcResponseCodes;
 import com.toddysoft.connect.java.tools.mcpserver.util.PlcValueConverter;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLogEventType;
@@ -124,6 +125,8 @@ public class ReadTool {
                     PlcValue plcValue = response.getPlcValue(tagName);
                     entry.put("value", PlcValueConverter.toJsonValue(plcValue));
                     entry.put("valueType", PlcValueConverter.getTypeName(plcValue));
+                } else {
+                    entry.put("message", PlcResponseCodes.explain(responseCode));
                 }
 
                 results.add(entry);

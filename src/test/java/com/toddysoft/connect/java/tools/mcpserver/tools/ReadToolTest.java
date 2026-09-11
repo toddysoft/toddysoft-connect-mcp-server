@@ -30,6 +30,7 @@ import org.apache.plc4x.java.api.types.PlcResponseCode;
 import org.apache.plc4x.java.api.types.PlcValueType;
 import org.apache.plc4x.java.api.value.PlcValue;
 import com.toddysoft.connect.java.tools.mcpserver.security.TestGuards;
+import com.toddysoft.connect.java.tools.mcpserver.util.PlcResponseCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -180,8 +181,39 @@ class ReadToolTest {
         assertEquals(1, result.size());
         Map<String, Object> entry = result.get(0);
         assertEquals("NOT_FOUND", entry.get("status"));
+        assertEquals(PlcResponseCodes.explain(PlcResponseCode.NOT_FOUND), entry.get("message"),
+                "Non-OK response should explain the status code");
         assertFalse(entry.containsKey("value"), "Non-OK response should not include value");
         assertFalse(entry.containsKey("valueType"), "Non-OK response should not include valueType");
+    }
+
+    /**
+     * Verifies that an INTERNAL_ERROR carries an explanation, since PLC4X does not expose
+     * the driver-side exception that caused it.
+     */
+    @Test
+    void readTags_internalError_includesExplanation() throws Exception {
+        when(auditLog.isEnabled()).thenReturn(false);
+        when(properties.getTimeoutSeconds()).thenReturn(30);
+        when(connectionCache.getConnection("s7://192.168.1.1")).thenReturn(connection);
+        when(connection.readRequestBuilder()).thenReturn(readBuilder);
+        when(readBuilder.addTagAddress(anyString(), anyString())).thenReturn(readBuilder);
+        when(readBuilder.build()).thenReturn(readRequest);
+        doReturn(CompletableFuture.completedFuture(readResponse)).when(readRequest).execute();
+
+        Collection<String> tagNames = List.of("%DB42:214.0[1..8;1]:BOOL");
+        when(readResponse.getTagNames()).thenReturn(tagNames);
+        when(readResponse.getResponseCode("%DB42:214.0[1..8;1]:BOOL"))
+                .thenReturn(PlcResponseCode.INTERNAL_ERROR);
+
+        List<Map<String, Object>> result = tool.readTags("s7://192.168.1.1",
+                List.of("%DB42:214.0[1..8;1]:BOOL"));
+
+        Map<String, Object> entry = result.get(0);
+        assertEquals("INTERNAL_ERROR", entry.get("status"));
+        String message = (String) entry.get("message");
+        assertNotNull(message);
+        assertTrue(message.contains("server log"), "should point at the server log: " + message);
     }
 
     /**

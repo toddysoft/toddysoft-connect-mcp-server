@@ -31,6 +31,7 @@ import com.toddysoft.connect.java.tools.mcpserver.security.ConnectionStringRedac
 import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailException;
 import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailRefusal;
 import com.toddysoft.connect.java.tools.mcpserver.security.OperationGuard;
+import com.toddysoft.connect.java.tools.mcpserver.util.PlcResponseCodes;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
@@ -114,7 +115,8 @@ public class BrowseTool {
             PlcResponseCode responseCode = response.getResponseCode("query");
             if (responseCode != PlcResponseCode.OK) {
                 Map<String, Object> errorEntry = new LinkedHashMap<>();
-                errorEntry.put("error", "Browse returned status: " + responseCode.name());
+                errorEntry.put("error", "Browse returned status: " + responseCode.name()
+                        + " — " + PlcResponseCodes.explain(responseCode));
                 results.add(errorEntry);
             } else {
                 List<PlcBrowseItem> items = response.getValues("query");

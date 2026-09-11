@@ -30,6 +30,7 @@ import com.toddysoft.connect.java.tools.mcpserver.security.ConnectionStringRedac
 import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailException;
 import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailRefusal;
 import com.toddysoft.connect.java.tools.mcpserver.security.OperationGuard;
+import com.toddysoft.connect.java.tools.mcpserver.util.PlcResponseCodes;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -125,6 +126,9 @@ public class WriteTool {
 
                 PlcResponseCode responseCode = response.getResponseCode(tagName);
                 entry.put("status", responseCode.name());
+                if (responseCode != PlcResponseCode.OK) {
+                    entry.put("message", PlcResponseCodes.explain(responseCode));
+                }
 
                 results.add(entry);
             }
