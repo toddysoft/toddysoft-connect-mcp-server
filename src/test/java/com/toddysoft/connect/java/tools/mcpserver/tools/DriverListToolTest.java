@@ -21,7 +21,11 @@ package com.toddysoft.connect.java.tools.mcpserver.tools;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLogEventType;
 import org.apache.plc4x.java.api.PlcDriver;
+import org.apache.plc4x.java.api.exceptions.PlcConnectionException;
 import org.apache.plc4x.java.api.PlcDriverManager;
+import org.apache.plc4x.java.api.metadata.Option;
+import org.apache.plc4x.java.api.metadata.OptionMetadata;
+import org.apache.plc4x.java.api.types.OptionType;
 import org.apache.plc4x.java.api.metadata.PlcDriverMetadata;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -274,5 +278,125 @@ class DriverListToolTest {
         when(driver.getMetadata()).thenReturn(metadata);
 
         return driver;
+    }
+
+    /**
+     * The supported transports come straight from the driver metadata, because a caller building a
+     * connection string needs to know which transport prefixes the driver will accept.
+     */
+    @Test
+    void listDrivers_reportsSupportedTransports() throws Exception {
+        when(auditLog.isEnabled()).thenReturn(false);
+        when(driverManager.getProtocolCodes()).thenReturn(Set.of("modbus-tcp"));
+
+        PlcDriver driver = createMockDriver("modbus-tcp", "Modbus TCP", "tcp", true);
+        when(driver.getMetadata().getSupportedTransportCodes()).thenReturn(List.of("tcp", "udp", "tls"));
+        when(driverManager.getDriver("modbus-tcp")).thenReturn(driver);
+
+        List<Map<String, Object>> results = tool.listDrivers();
+
+        assertEquals(List.of("tcp", "udp", "tls"), results.get(0).get("supportedTransports"));
+    }
+
+    /**
+     * describe_driver renders the PLC4X option metadata verbatim: type, description, required
+     * flag, default value and the secret marker.
+     */
+    @Test
+    void describeDriver_rendersProtocolOptions() throws Exception {
+        when(auditLog.isEnabled()).thenReturn(false);
+
+        PlcDriver driver = createMockDriver("opcua", "OPC UA", "tcp", false);
+        PlcDriverMetadata metadata = driver.getMetadata();
+        OptionMetadata protocolOptions = optionMetadata(
+                option("username", OptionType.STRING, "The user to connect as.", false, null, false),
+                option("password", OptionType.STRING, "The password.", false, null, true),
+                option("request-timeout", OptionType.INT, "Timeout in ms.", true, 5000, false));
+        when(metadata.getProtocolConfigurationOptionMetadata()).thenReturn(Optional.of(protocolOptions));
+        when(metadata.getTransportConfigurationOptionMetadata("tcp")).thenReturn(Optional.empty());
+        when(driverManager.getDriver("opcua")).thenReturn(driver);
+
+        Map<String, Object> result = tool.describeDriver("opcua", null);
+
+        assertEquals("opcua", result.get("protocolCode"));
+        assertEquals("tcp", result.get("transportCode"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> options = (List<Map<String, Object>>) result.get("protocolOptions");
+        assertEquals(3, options.size());
+
+        Map<String, Object> username = options.get(0);
+        assertEquals("username", username.get("key"));
+        assertEquals("STRING", username.get("type"));
+        assertEquals(false, username.get("required"));
+        // A non-secret option carries no secret marker at all, rather than "secret": false.
+        assertFalse(username.containsKey("secret"));
+        // An absent default must stay absent, so it cannot be read as a default of null.
+        assertFalse(username.containsKey("defaultValue"));
+
+        assertEquals(true, options.get(1).get("secret"));
+
+        Map<String, Object> timeout = options.get(2);
+        assertEquals(true, timeout.get("required"));
+        assertEquals(5000, timeout.get("defaultValue"));
+    }
+
+    /**
+     * An explicitly named transport is described instead of the driver's default.
+     */
+    @Test
+    void describeDriver_explicitTransport_overridesDefault() throws Exception {
+        when(auditLog.isEnabled()).thenReturn(false);
+
+        PlcDriver driver = createMockDriver("modbus-tcp", "Modbus TCP", "tcp", true);
+        PlcDriverMetadata metadata = driver.getMetadata();
+        when(metadata.getProtocolConfigurationOptionMetadata()).thenReturn(Optional.empty());
+        OptionMetadata tlsOptions = optionMetadata(
+                option("tls.keystore", OptionType.STRING, "Keystore path.", false, null, false));
+        when(metadata.getTransportConfigurationOptionMetadata("tls")).thenReturn(Optional.of(tlsOptions));
+        when(driverManager.getDriver("modbus-tcp")).thenReturn(driver);
+
+        Map<String, Object> result = tool.describeDriver("modbus-tcp", "tls");
+
+        assertEquals("tls", result.get("transportCode"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> options = (List<Map<String, Object>>) result.get("transportOptions");
+        assertEquals("tls.keystore", options.get(0).get("key"));
+        // Protocol options are still reported, just empty for this driver.
+        assertEquals(List.of(), result.get("protocolOptions"));
+    }
+
+    /**
+     * An unknown protocol code is reported as an error entry rather than thrown, matching how
+     * listDrivers already degrades.
+     */
+    @Test
+    void describeDriver_unknownDriver_returnsError() throws Exception {
+        when(auditLog.isEnabled()).thenReturn(false);
+        when(driverManager.getDriver("nope"))
+                .thenThrow(new PlcConnectionException("Unable to find driver for protocol 'nope'"));
+
+        Map<String, Object> result = tool.describeDriver("nope", null);
+
+        assertTrue(((String) result.get("error")).contains("nope"));
+    }
+
+    private static OptionMetadata optionMetadata(Option... options) {
+        OptionMetadata metadata = mock(OptionMetadata.class);
+        when(metadata.getOptions()).thenReturn(List.of(options));
+        return metadata;
+    }
+
+    private static Option option(String key, OptionType type, String description,
+                                 boolean required, Object defaultValue, boolean secret) {
+        Option option = mock(Option.class);
+        when(option.getKey()).thenReturn(key);
+        when(option.getType()).thenReturn(type);
+        when(option.getDescription()).thenReturn(description);
+        when(option.isRequired()).thenReturn(required);
+        when(option.getDefaultValue()).thenReturn(Optional.ofNullable(defaultValue));
+        when(option.getSince()).thenReturn(Optional.empty());
+        when(option.isSecret()).thenReturn(secret);
+        return option;
     }
 }
