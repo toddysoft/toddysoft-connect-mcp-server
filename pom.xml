@@ -82,6 +82,11 @@
       </dependency>
       <!-- PLC4X publishes no BOM, so every plc4j-* dependency below pins ${plc4x.version}
            explicitly rather than importing one here. -->
+      <dependency>
+        <groupId>net.java.dev.jna</groupId>
+        <artifactId>jna</artifactId>
+        <version>5.19.1</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -233,7 +238,6 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
-
 
   <build>
     <plugins>
