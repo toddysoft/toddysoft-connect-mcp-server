@@ -22,4 +22,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local agent/tooling state, not part of the project
+.mcp.json
 /docs/superpowers/
