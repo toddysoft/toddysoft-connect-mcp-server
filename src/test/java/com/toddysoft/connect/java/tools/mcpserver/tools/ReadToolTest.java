@@ -29,6 +29,7 @@ import org.apache.plc4x.java.api.messages.PlcReadResponse;
 import org.apache.plc4x.java.api.types.PlcResponseCode;
 import org.apache.plc4x.java.api.types.PlcValueType;
 import org.apache.plc4x.java.api.value.PlcValue;
+import com.toddysoft.connect.java.tools.mcpserver.security.TestGuards;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -76,7 +77,7 @@ class ReadToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new ReadTool(connectionCache, properties, auditLog);
+        tool = new ReadTool(connectionCache, properties, auditLog, TestGuards.permissive(), TestGuards.redactor());
     }
 
     /**

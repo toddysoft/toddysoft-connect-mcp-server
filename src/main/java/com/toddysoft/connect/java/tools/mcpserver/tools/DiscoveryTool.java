@@ -27,9 +27,13 @@ import org.apache.plc4x.java.api.PlcDriverManager;
 import org.apache.plc4x.java.api.messages.PlcDiscoveryItem;
 import org.apache.plc4x.java.api.messages.PlcDiscoveryRequest;
 import org.apache.plc4x.java.api.value.PlcValue;
+import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailException;
+import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailRefusal;
+import com.toddysoft.connect.java.tools.mcpserver.security.OperationGuard;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -43,11 +47,13 @@ import java.util.concurrent.TimeUnit;
  * that support discovery.
  */
 @Component
+@ConditionalOnProperty(prefix = "toddysoft.mcp.security.discovery", name = "enabled", havingValue = "true")
 public class DiscoveryTool {
 
     private final PlcDriverManager driverManager;
     private final McpServerProperties properties;
     private final AuditLog auditLog;
+    private final OperationGuard guard;
 
     /**
      * Constructs a DiscoveryTool with the required dependencies.
@@ -56,8 +62,8 @@ public class DiscoveryTool {
      * @param auditLog      the audit log for recording tool invocations
      */
     @Autowired
-    public DiscoveryTool(McpServerProperties properties, AuditLog auditLog) {
-        this(PlcDriverManager.getDefault(), properties, auditLog);
+    public DiscoveryTool(McpServerProperties properties, AuditLog auditLog, OperationGuard guard) {
+        this(PlcDriverManager.getDefault(), properties, auditLog, guard);
     }
 
     /**
@@ -67,10 +73,12 @@ public class DiscoveryTool {
      * @param properties    configuration properties including discovery timeout
      * @param auditLog      the audit log for recording tool invocations
      */
-    DiscoveryTool(PlcDriverManager driverManager, McpServerProperties properties, AuditLog auditLog) {
+    DiscoveryTool(PlcDriverManager driverManager, McpServerProperties properties, AuditLog auditLog,
+                  OperationGuard guard) {
         this.driverManager = driverManager;
         this.properties = properties;
         this.auditLog = auditLog;
+        this.guard = guard;
     }
 
     /**
@@ -97,23 +105,31 @@ public class DiscoveryTool {
         try {
             List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-            if (protocolCode != null && !protocolCode.isBlank()) {
-                // Discover using a specific driver.
-                PlcDriver driver = driverManager.getDriver(protocolCode);
-                if (!driver.getMetadata().isDiscoverySupported()) {
-                    Map<String, Object> info = new LinkedHashMap<>();
-                    info.put("error", "Driver '" + protocolCode + "' does not support discovery.");
-                    results.add(info);
-                } else {
+            // The allowlist decides both whether a scan may run and, for an unrestricted call,
+            // which protocols it covers — a sweep scans what is permitted, never the classpath.
+            List<String> protocolsToScan = (protocolCode != null && !protocolCode.isBlank())
+                    ? List.of(protocolCode)
+                    : guard.allowedDiscoveryProtocols();
+
+            if (protocolsToScan.isEmpty()) {
+                // Nothing permitted: ask the guard so the refusal states the actual reason.
+                guard.checkDiscovery(null);
+            }
+
+            boolean explicitProtocol = protocolCode != null && !protocolCode.isBlank();
+            for (String code : protocolsToScan) {
+                // Refused before the driver is even looked up, so no packet leaves the host.
+                guard.checkDiscovery(code);
+                PlcDriver driver = driverManager.getDriver(code);
+                if (driver.getMetadata().isDiscoverySupported()) {
                     futures.add(runDiscovery(driver, results));
-                }
-            } else {
-                // Discover across all protocols that support it.
-                for (String code : driverManager.getProtocolCodes()) {
-                    PlcDriver driver = driverManager.getDriver(code);
-                    if (driver.getMetadata().isDiscoverySupported()) {
-                        futures.add(runDiscovery(driver, results));
-                    }
+                } else if (explicitProtocol) {
+                    // Only worth saying when the caller named this protocol. In a sweep it is
+                    // noise: the caller asked for devices, not for a list of drivers that cannot
+                    // look for them.
+                    Map<String, Object> info = new LinkedHashMap<>();
+                    info.put("error", "Driver '" + code + "' does not support discovery.");
+                    results.add(info);
                 }
             }
 
@@ -127,6 +143,8 @@ public class DiscoveryTool {
                 auditLog.write(AuditLogEventType.API_RESPONSE,
                         "discover_devices returned " + results.size() + " items", results);
             }
+        } catch (GuardRailException refusal) {
+            return GuardRailRefusal.asResultList(refusal);
         } catch (Exception e) {
             if (auditLog.isEnabled()) {
                 auditLog.write(AuditLogEventType.ERROR,

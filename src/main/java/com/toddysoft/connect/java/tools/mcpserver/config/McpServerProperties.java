@@ -18,6 +18,7 @@
  */
 package com.toddysoft.connect.java.tools.mcpserver.config;
 
+import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -38,6 +39,9 @@ public class McpServerProperties {
     /** Connection cache settings. */
     private Cache cache = new Cache();
 
+    /** Guard-rails: what this server is permitted to do, and how fast. */
+    private GuardRailProperties security = new GuardRailProperties();
+
     public int getTimeoutSeconds() {
         return timeoutSeconds;
     }
@@ -52,6 +56,14 @@ public class McpServerProperties {
 
     public void setDiscoveryTimeoutSeconds(int discoveryTimeoutSeconds) {
         this.discoveryTimeoutSeconds = discoveryTimeoutSeconds;
+    }
+
+    public GuardRailProperties getSecurity() {
+        return security;
+    }
+
+    public void setSecurity(GuardRailProperties security) {
+        this.security = security;
     }
 
     public Cache getCache() {

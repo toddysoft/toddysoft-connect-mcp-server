@@ -30,6 +30,7 @@ import org.apache.plc4x.java.api.messages.PlcBrowseResponse;
 import org.apache.plc4x.java.api.model.PlcTag;
 import org.apache.plc4x.java.api.types.PlcResponseCode;
 import org.apache.plc4x.java.api.types.PlcValueType;
+import com.toddysoft.connect.java.tools.mcpserver.security.TestGuards;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -76,7 +77,7 @@ class BrowseToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new BrowseTool(connectionCache, properties, auditLog);
+        tool = new BrowseTool(connectionCache, properties, auditLog, TestGuards.permissive(), TestGuards.redactor());
     }
 
     /**

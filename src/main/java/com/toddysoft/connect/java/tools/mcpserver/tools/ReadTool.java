@@ -28,6 +28,10 @@ import org.apache.plc4x.java.api.messages.PlcReadRequest;
 import org.apache.plc4x.java.api.messages.PlcReadResponse;
 import org.apache.plc4x.java.api.types.PlcResponseCode;
 import org.apache.plc4x.java.api.value.PlcValue;
+import com.toddysoft.connect.java.tools.mcpserver.security.ConnectionStringRedactor;
+import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailException;
+import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailRefusal;
+import com.toddysoft.connect.java.tools.mcpserver.security.OperationGuard;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
@@ -45,6 +49,8 @@ public class ReadTool {
     private final PlcConnectionCache connectionCache;
     private final McpServerProperties properties;
     private final AuditLog auditLog;
+    private final OperationGuard guard;
+    private final ConnectionStringRedactor redactor;
 
     /**
      * Constructs a ReadTool with the required dependencies.
@@ -52,13 +58,19 @@ public class ReadTool {
      * @param connectionCache pooling connection cache for PLC connections
      * @param properties        configuration properties including request timeout
      * @param auditLog          the audit log for recording tool invocations
+     * @param guard             decides whether this operation is permitted at all
+     * @param redactor          masks credentials before the connection string is logged
      */
     public ReadTool(PlcConnectionCache connectionCache,
                     McpServerProperties properties,
-                    AuditLog auditLog) {
+                    AuditLog auditLog,
+                    OperationGuard guard,
+                    ConnectionStringRedactor redactor) {
         this.connectionCache = connectionCache;
         this.properties = properties;
         this.auditLog = auditLog;
+        this.guard = guard;
+        this.redactor = redactor;
     }
 
     /**
@@ -77,10 +89,16 @@ public class ReadTool {
 
         if (auditLog.isEnabled()) {
             auditLog.write(AuditLogEventType.API_REQUEST,
-                    "read_tags invoked for " + connectionUrl + " with " + tags.size() + " tags", tags);
+                    "read_tags invoked for " + redactor.redact(connectionUrl) + " with " + tags.size() + " tags", tags);
         }
 
         List<Map<String, Object>> results = new ArrayList<>();
+
+        try {
+            guard.checkRead(connectionUrl);
+        } catch (GuardRailException refusal) {
+            return GuardRailRefusal.asResultList(refusal);
+        }
 
         try (PlcConnection connection = connectionCache.getConnection(connectionUrl)) {
             PlcReadRequest.Builder builder = connection.readRequestBuilder();
@@ -118,7 +136,7 @@ public class ReadTool {
         } catch (Exception e) {
             if (auditLog.isEnabled()) {
                 auditLog.write(AuditLogEventType.ERROR,
-                        "read_tags failed for " + connectionUrl + ": " + e.getMessage());
+                        "read_tags failed for " + redactor.redact(connectionUrl) + ": " + e.getMessage());
             }
             Map<String, Object> errorEntry = new LinkedHashMap<>();
             errorEntry.put("error", "Read failed: " + e.getMessage());

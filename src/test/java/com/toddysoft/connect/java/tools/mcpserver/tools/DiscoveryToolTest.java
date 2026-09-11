@@ -29,6 +29,7 @@ import org.apache.plc4x.java.api.messages.PlcDiscoveryRequest;
 import org.apache.plc4x.java.api.messages.PlcDiscoveryResponse;
 import org.apache.plc4x.java.api.metadata.PlcDriverMetadata;
 import org.apache.plc4x.java.api.value.PlcValue;
+import com.toddysoft.connect.java.tools.mcpserver.security.TestGuards;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,7 +64,10 @@ class DiscoveryToolTest {
     @BeforeEach
     void setUp() {
         // Use the package-private constructor to inject the mock driver manager.
-        tool = new DiscoveryTool(driverManager, properties, auditLog);
+        // Every protocol this class exercises is allowlisted; the guard-rails themselves
+        // are covered by ToolGuardRailTest.
+        tool = new DiscoveryTool(driverManager, properties, auditLog,
+                TestGuards.permissive("s7", "modbus", "modbus-tcp", "bad"));
     }
 
     /**
@@ -138,16 +142,17 @@ class DiscoveryToolTest {
     }
 
     /**
-     * When protocolCode is null, the tool should enumerate all protocol codes
-     * and run discovery for each driver that supports it.
+     * When protocolCode is null, the tool scans the allowlisted protocols — never every driver on
+     * the classpath — and runs discovery for each that supports it.
      */
     @Test
-    void discoverDevices_nullProtocol_enumeratesAllProtocols() throws Exception {
+    void discoverDevices_nullProtocol_scansTheAllowlistedProtocols() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getDiscoveryTimeoutSeconds()).thenReturn(5);
 
-        // Two drivers: s7 supports discovery, modbus does not.
-        when(driverManager.getProtocolCodes()).thenReturn(new LinkedHashSet<>(List.of("s7", "modbus")));
+        // Two allowlisted drivers: s7 supports discovery, modbus does not.
+        DiscoveryTool twoProtocols = new DiscoveryTool(driverManager, properties, auditLog,
+                TestGuards.permissive("s7", "modbus"));
 
         PlcDriver s7Driver = mock(PlcDriver.class);
         PlcDriverMetadata s7Meta = mock(PlcDriverMetadata.class);
@@ -177,7 +182,7 @@ class DiscoveryToolTest {
             return CompletableFuture.completedFuture(response);
         });
 
-        List<Map<String, Object>> results = tool.discoverDevices(null);
+        List<Map<String, Object>> results = twoProtocols.discoverDevices(null);
 
         // Only the s7 item should appear; modbus was skipped.
         assertEquals(1, results.size());
@@ -205,18 +210,20 @@ class DiscoveryToolTest {
     }
 
     /**
-     * When all protocol codes is empty, the result list should be empty.
+     * An unrestricted sweep with nothing allowlisted is refused, rather than quietly returning
+     * nothing — an empty result would read as "no devices found", which is a different claim.
      */
     @Test
-    void discoverDevices_emptyProtocolCodes_returnsEmptyResults() throws Exception {
-        when(auditLog.isEnabled()).thenReturn(true);
-        when(properties.getDiscoveryTimeoutSeconds()).thenReturn(5);
-        when(driverManager.getProtocolCodes()).thenReturn(Collections.emptySet());
+    void discoverDevices_nothingAllowlisted_isRefused() throws Exception {
+        when(auditLog.isEnabled()).thenReturn(false);
+        DiscoveryTool restricted = new DiscoveryTool(driverManager, properties, auditLog,
+                TestGuards.permissive());
 
-        List<Map<String, Object>> results = tool.discoverDevices(null);
+        List<Map<String, Object>> results = restricted.discoverDevices(null);
 
-        assertNotNull(results);
-        assertTrue(results.isEmpty(), "No protocols means no discovery results");
+        assertEquals(1, results.size());
+        assertEquals("PROTOCOL_NOT_ALLOWED", results.get(0).get("reason"));
+        verifyNoInteractions(driverManager);
     }
 
     /**
@@ -226,14 +233,29 @@ class DiscoveryToolTest {
     void discoverDevices_auditLogEnabled_logsRequestAndResponse() throws Exception {
         when(auditLog.isEnabled()).thenReturn(true);
         when(properties.getDiscoveryTimeoutSeconds()).thenReturn(5);
-        when(driverManager.getProtocolCodes()).thenReturn(Collections.emptySet());
 
-        tool.discoverDevices(null);
+        // One allowlisted driver that can discover, finding nothing: a complete, quiet sweep.
+        PlcDriver driver = mock(PlcDriver.class);
+        PlcDriverMetadata metadata = mock(PlcDriverMetadata.class);
+        when(metadata.isDiscoverySupported()).thenReturn(true);
+        when(driver.getMetadata()).thenReturn(metadata);
+        PlcDiscoveryRequest.Builder builder = mock(PlcDiscoveryRequest.Builder.class);
+        PlcDiscoveryRequest request = mock(PlcDiscoveryRequest.class);
+        when(driver.discoveryRequestBuilder()).thenReturn(builder);
+        when(builder.addQuery("all", "*")).thenReturn(builder);
+        when(builder.build()).thenReturn(request);
+        // executeWithHandler is declared with a wildcard return, so answer rather than thenReturn.
+        when(request.executeWithHandler(any(PlcDiscoveryItemHandler.class)))
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(mock(PlcDiscoveryResponse.class)));
+        when(driverManager.getDriver("modbus")).thenReturn(driver);
+        DiscoveryTool single = new DiscoveryTool(driverManager, properties, auditLog,
+                TestGuards.permissive("modbus"));
+
+        single.discoverDevices(null);
 
         // Request log should mention "for all protocols".
         verify(auditLog).write(eq(AuditLogEventType.API_REQUEST),
                 contains("for all protocols"));
-        // Response log should mention the item count.
         verify(auditLog).write(eq(AuditLogEventType.API_RESPONSE),
                 contains("returned 0 items"), any());
     }
@@ -266,9 +288,16 @@ class DiscoveryToolTest {
     void discoverDevices_auditLogDisabled_doesNotLog() throws Exception {
         when(auditLog.isEnabled()).thenReturn(false);
         when(properties.getDiscoveryTimeoutSeconds()).thenReturn(5);
-        when(driverManager.getProtocolCodes()).thenReturn(Collections.emptySet());
 
-        tool.discoverDevices(null);
+        PlcDriver driver = mock(PlcDriver.class);
+        PlcDriverMetadata metadata = mock(PlcDriverMetadata.class);
+        when(metadata.isDiscoverySupported()).thenReturn(false);
+        when(driver.getMetadata()).thenReturn(metadata);
+        when(driverManager.getDriver("modbus")).thenReturn(driver);
+        DiscoveryTool single = new DiscoveryTool(driverManager, properties, auditLog,
+                TestGuards.permissive("modbus"));
+
+        single.discoverDevices(null);
 
         verify(auditLog, never()).write(any(AuditLogEventType.class), anyString());
         verify(auditLog, never()).write(any(AuditLogEventType.class), anyString(), any());

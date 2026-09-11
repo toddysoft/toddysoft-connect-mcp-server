@@ -19,6 +19,9 @@
 package com.toddysoft.connect.java.tools.mcpserver.config;
 
 import org.apache.plc4x.java.utils.cache.PlcConnectionCache;
+import com.toddysoft.connect.java.tools.mcpserver.security.ConnectionStringRedactor;
+import com.toddysoft.connect.java.tools.mcpserver.security.OperationGuard;
+import com.toddysoft.connect.java.tools.mcpserver.security.RateLimiter;
 import com.toddysoft.connect.java.tools.mcpserver.tools.*;
 import org.apache.plc4x.java.utils.auditlog.api.AuditLog;
 import jakarta.annotation.PreDestroy;
@@ -31,6 +34,9 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -82,14 +88,53 @@ public class McpServerConfiguration {
     }
 
     /**
+     * Masks credentials before a connection string reaches the audit log.
+     *
+     * <p>In Apache PLC4X credentials are ordinary connection parameters, and each driver declares
+     * which of its parameters are secret — so the redactor asks the drivers rather than guessing.</p>
+     *
+     * @return the connection-string redactor
+     */
+    @Bean
+    public ConnectionStringRedactor connectionStringRedactor() {
+        return new ConnectionStringRedactor(PlcDriverManager.getDefault());
+    }
+
+    /**
+     * The two-bucket rate limiter, paced against the system's monotonic clock.
+     *
+     * @param properties the MCP server configuration properties
+     * @return a rate limiter over the configured limits
+     */
+    @Bean
+    public RateLimiter rateLimiter(McpServerProperties properties) {
+        // Startup is the last moment a bad limit can be reported rather than silently enforced.
+        properties.getSecurity().validate();
+        return new RateLimiter(properties.getSecurity().getRateLimit(), System::nanoTime);
+    }
+
+    /**
+     * The guard every device-touching tool consults before acting.
+     *
+     * @param properties  the MCP server configuration properties
+     * @param rateLimiter the configured rate limiter
+     * @param auditLog    the audit log, which records every refusal
+     * @return the operation guard
+     */
+    @Bean
+    public OperationGuard operationGuard(McpServerProperties properties, RateLimiter rateLimiter, AuditLog auditLog) {
+        return new OperationGuard(properties.getSecurity(), rateLimiter, auditLog);
+    }
+
+    /**
      * Registers all MCP tool beans so the Spring AI MCP server exposes them to clients.
      *
      * <p>Without this provider, the server starts but advertises zero tools.</p>
      *
      * @param browseTool    the browse tool
      * @param readTool      the read tool
-     * @param writeTool     the write tool
-     * @param discoveryTool the discovery tool
+     * @param writeTool     the write tool, absent when writes are disabled
+     * @param discoveryTool the discovery tool, absent when discovery is disabled
      * @param driverListTool the driver list tool
      * @return a provider that exposes all tool methods to the MCP server
      */
@@ -97,11 +142,28 @@ public class McpServerConfiguration {
     public ToolCallbackProvider toolCallbackProvider(
             BrowseTool browseTool,
             ReadTool readTool,
-            WriteTool writeTool,
-            DiscoveryTool discoveryTool,
+            Optional<WriteTool> writeTool,
+            Optional<DiscoveryTool> discoveryTool,
             DriverListTool driverListTool) {
+
+        // A capability that is switched off is not advertised at all. Offering a tool that always
+        // refuses invites a wasted round trip and reads to the model as a broken server rather
+        // than a policy.
+        List<Object> toolObjects = new ArrayList<>(List.of(browseTool, readTool, driverListTool));
+        writeTool.ifPresent(toolObjects::add);
+        discoveryTool.ifPresent(toolObjects::add);
+
+        if (writeTool.isEmpty()) {
+            logger.info("write_tags is not advertised: writes are disabled "
+                    + "(set toddysoft.mcp.security.writes.enabled=true to permit them)");
+        }
+        if (discoveryTool.isEmpty()) {
+            logger.info("discover_devices is not advertised: discovery is disabled "
+                    + "(set toddysoft.mcp.security.discovery.enabled=true and allowlist protocols)");
+        }
+
         return MethodToolCallbackProvider.builder()
-                .toolObjects(browseTool, readTool, writeTool, discoveryTool, driverListTool)
+                .toolObjects(toolObjects.toArray())
                 .build();
     }
 

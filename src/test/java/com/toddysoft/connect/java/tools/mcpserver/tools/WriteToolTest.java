@@ -27,6 +27,7 @@ import org.apache.plc4x.java.api.exceptions.PlcConnectionException;
 import org.apache.plc4x.java.api.messages.PlcWriteRequest;
 import org.apache.plc4x.java.api.messages.PlcWriteResponse;
 import org.apache.plc4x.java.api.types.PlcResponseCode;
+import com.toddysoft.connect.java.tools.mcpserver.security.TestGuards;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -73,7 +74,7 @@ class WriteToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new WriteTool(connectionCache, properties, auditLog);
+        tool = new WriteTool(connectionCache, properties, auditLog, TestGuards.permissive(), TestGuards.redactor());
     }
 
     /**

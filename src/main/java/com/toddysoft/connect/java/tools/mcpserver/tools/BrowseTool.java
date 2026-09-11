@@ -27,6 +27,10 @@ import org.apache.plc4x.java.api.messages.PlcBrowseItem;
 import org.apache.plc4x.java.api.messages.PlcBrowseRequest;
 import org.apache.plc4x.java.api.messages.PlcBrowseResponse;
 import org.apache.plc4x.java.api.types.PlcResponseCode;
+import com.toddysoft.connect.java.tools.mcpserver.security.ConnectionStringRedactor;
+import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailException;
+import com.toddysoft.connect.java.tools.mcpserver.security.GuardRailRefusal;
+import com.toddysoft.connect.java.tools.mcpserver.security.OperationGuard;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
@@ -45,6 +49,8 @@ public class BrowseTool {
     private final PlcConnectionCache connectionCache;
     private final McpServerProperties properties;
     private final AuditLog auditLog;
+    private final OperationGuard guard;
+    private final ConnectionStringRedactor redactor;
 
     /**
      * Constructs a BrowseTool with the required dependencies.
@@ -52,13 +58,19 @@ public class BrowseTool {
      * @param connectionCache pooling connection cache for PLC connections
      * @param properties        configuration properties including request timeout
      * @param auditLog          the audit log for recording tool invocations
+     * @param guard             decides whether this operation is permitted at all
+     * @param redactor          masks credentials before the connection string is logged
      */
     public BrowseTool(PlcConnectionCache connectionCache,
                       McpServerProperties properties,
-                      AuditLog auditLog) {
+                      AuditLog auditLog,
+                     OperationGuard guard,
+                     ConnectionStringRedactor redactor) {
         this.connectionCache = connectionCache;
         this.properties = properties;
         this.auditLog = auditLog;
+        this.guard = guard;
+        this.redactor = redactor;
     }
 
     /**
@@ -80,10 +92,16 @@ public class BrowseTool {
 
         if (auditLog.isEnabled()) {
             auditLog.write(AuditLogEventType.API_REQUEST,
-                    "browse_tags invoked for " + connectionUrl + " with query: " + effectiveQuery);
+                    "browse_tags invoked for " + redactor.redact(connectionUrl) + " with query: " + effectiveQuery);
         }
 
         List<Map<String, Object>> results = new ArrayList<>();
+
+        try {
+            guard.checkRead(connectionUrl);
+        } catch (GuardRailException refusal) {
+            return GuardRailRefusal.asResultList(refusal);
+        }
 
         try (PlcConnection connection = connectionCache.getConnection(connectionUrl)) {
             PlcBrowseRequest request = connection.browseRequestBuilder()
@@ -112,7 +130,7 @@ public class BrowseTool {
         } catch (Exception e) {
             if (auditLog.isEnabled()) {
                 auditLog.write(AuditLogEventType.ERROR,
-                        "browse_tags failed for " + connectionUrl + ": " + e.getMessage());
+                        "browse_tags failed for " + redactor.redact(connectionUrl) + ": " + e.getMessage());
             }
             Map<String, Object> errorEntry = new LinkedHashMap<>();
             // Include the full cause chain so the root cause is visible to the caller.

@@ -36,7 +36,7 @@ class McpServerConfigurationTest {
     }
 
     @Test
-    void cachedPlcConnectionManager_createsWithDefaultProperties() {
+    void plcConnectionCache_createsWithDefaultProperties() {
         McpServerProperties properties = new McpServerProperties();
         PlcConnectionCache manager = configuration.plcConnectionCache(properties);
 
@@ -44,7 +44,7 @@ class McpServerConfigurationTest {
     }
 
     @Test
-    void cachedPlcConnectionManager_createsWithCustomProperties() {
+    void plcConnectionCache_createsWithCustomProperties() {
         McpServerProperties properties = new McpServerProperties();
         properties.getCache().setMaxIdleMinutes(10);
         properties.getCache().setMaxLeaseSeconds(120);

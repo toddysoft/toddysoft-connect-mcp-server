@@ -17,3 +17,50 @@ toddysoft:
     cache:
       max-idle-minutes: 5
       max-lease-seconds: 60
+
+    # Guard-rails. The defaults below are the safe posture: an operator opts in to risk.
+    security:
+      writes:
+        # A write changes physical state. Off until you say otherwise; while off, the write_tags
+        # tool is not advertised to the client at all.
+        enabled: false
+        # Writable tag addresses, keyed by device (host, host:port, or "*" for any device).
+        # Required when writes are enabled: an empty map fails startup rather than being read as
+        # either "everything" or "nothing", so deleting the last rule cannot silently change the
+        # policy. Patterns match the raw tag address; "*" is a wildcard, everything else is
+        # literal. "**" is the one way to permit every address, and a bare "*" pattern is refused
+        # so that "everything" is never one keystroke away from a narrow rule.
+        allow: {}
+        #  "10.0.0.5":
+        #    - "%DB10.*"        # the recipe DB only
+        #    - "%M0.0:BOOL"
+        #  "10.0.0.9:502":
+        #    - "40001:INT"
+        #  "*":
+        #    - "%DB99.*"        # scratch DB on any device
+
+      discovery:
+        # Discovery is broadcast/multicast traffic, and is restricted or forbidden on many plant
+        # networks. While off, the discover_devices tool is not advertised at all.
+        enabled: false
+        # Protocols permitted to scan. Must be non-empty when discovery is enabled — startup fails
+        # otherwise. An unrestricted discover_devices call scans exactly this list, never every
+        # driver on the classpath.
+        protocols: []
+        #  - modbus-tcp
+        #  - s7
+
+      rate-limit:
+        # Too many requests can degrade a PLC's control task or saturate the network. Over-limit
+        # calls are refused with a retry hint, never queued.
+        enabled: true
+        # Protects one controller.
+        per-device:
+          requests-per-second: 5
+          burst: 10
+        # Protects the network: hundreds of devices, each within its own limit, still add up.
+        global:
+          requests-per-second: 20
+          burst: 40
+        # Upper bound on per-device buckets held at once, so tracking cannot grow without limit.
+        max-tracked-devices: 1000
