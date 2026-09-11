@@ -21,6 +21,8 @@ package com.toddysoft.connect.java.tools.mcpserver.util;
 import org.apache.plc4x.java.api.types.PlcValueType;
 import org.apache.plc4x.java.api.value.PlcValue;
 
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,14 +38,16 @@ import java.util.stream.Collectors;
  * <p>Conversion rules:</p>
  * <ul>
  *   <li>{@code BOOL} → {@link Boolean}</li>
- *   <li>{@code SINT, USINT, INT, UINT, BYTE, WORD, DINT, UDINT, DWORD} → {@link Integer}</li>
- *   <li>{@code LINT, ULINT, LWORD} → {@link Long}</li>
+ *   <li>{@code SINT, USINT, INT, UINT, BYTE, WORD, DINT} → {@link Integer}</li>
+ *   <li>{@code UDINT, DWORD, LINT} → {@link Long}</li>
+ *   <li>{@code ULINT, LWORD} → {@link BigInteger}</li>
  *   <li>{@code REAL} → {@link Float}</li>
  *   <li>{@code LREAL} → {@link Double}</li>
  *   <li>{@code STRING, WSTRING, CHAR, WCHAR} → {@link String}</li>
  *   <li>{@code Struct} → {@link Map} (recursive)</li>
  *   <li>{@code List} → {@link List} (recursive)</li>
  *   <li>{@code DATE, TIME_OF_DAY, DATE_AND_TIME, DATE_AND_LTIME, LDATE, LTIME_OF_DAY, TIME, LTIME} → {@link String} (ISO 8601 or duration)</li>
+ *   <li>{@code RAW_BYTE_ARRAY} → {@link List} of {@link Integer} (unsigned, 0-255)</li>
  *   <li>{@code NULL} → {@code null}</li>
  * </ul>
  */
@@ -68,11 +72,14 @@ public final class PlcValueConverter {
         return switch (type) {
             case BOOL -> value.getBoolean();
 
-            // Small integer types → int
-            case SINT, USINT, INT, UINT, BYTE, WORD, DINT, UDINT, DWORD -> value.getInteger();
+            // Signed types up to 32 bit and unsigned types up to 16 bit → int
+            case SINT, USINT, INT, UINT, BYTE, WORD, DINT -> value.getInteger();
 
-            // Large integer types → long
-            case LINT, ULINT, LWORD -> value.getLong();
+            // Unsigned 32 bit and signed 64 bit → long (an int would wrap 0xDEADBEEF to a negative)
+            case UDINT, DWORD, LINT -> value.getLong();
+
+            // Unsigned 64 bit → BigInteger (values above 2^63-1 do not fit a long)
+            case ULINT, LWORD -> value.getBigInteger();
 
             // Floating point
             case REAL -> value.getFloat();
@@ -101,8 +108,18 @@ public final class PlcValueConverter {
                 .map(PlcValueConverter::toJsonValue)
                 .collect(Collectors.toList());
 
-            // RAW_BYTE_ARRAY and NULL
-            case RAW_BYTE_ARRAY -> value.getObject() != null ? value.getObject().toString() : null;
+            // Raw bytes → list of unsigned ints, matching how BYTE arrays are rendered
+            case RAW_BYTE_ARRAY -> {
+                byte[] raw = value.getRaw();
+                if (raw == null) {
+                    yield null;
+                }
+                List<Integer> bytes = new ArrayList<>(raw.length);
+                for (byte b : raw) {
+                    bytes.add(b & 0xFF);
+                }
+                yield bytes;
+            }
             case NULL -> null;
         };
     }

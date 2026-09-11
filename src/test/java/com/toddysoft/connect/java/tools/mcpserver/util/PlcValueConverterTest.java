@@ -22,6 +22,7 @@ import org.apache.plc4x.java.spi.values.*;
 import org.apache.plc4x.java.api.value.PlcValue;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -63,6 +64,39 @@ class PlcValueConverterTest {
     void toJsonValue_withPlcLint_returnsLong() {
         long bigValue = 5_000_000_000L;
         assertEquals(bigValue, PlcValueConverter.toJsonValue(new PlcLINT(bigValue)));
+    }
+
+    @Test
+    void toJsonValue_withPlcUdint_returnsUnsignedLong() {
+        // 0xFFFFFFFF must not wrap to -1
+        Object result = PlcValueConverter.toJsonValue(new PlcUDINT(4_294_967_295L));
+        assertInstanceOf(Long.class, result);
+        assertEquals(4_294_967_295L, result);
+    }
+
+    @Test
+    void toJsonValue_withPlcDword_returnsUnsignedLong() {
+        // 0xDEADBEEF used to come back as -559038737
+        Object result = PlcValueConverter.toJsonValue(new PlcDWORD(0xDEADBEEFL));
+        assertInstanceOf(Long.class, result);
+        assertEquals(3_735_928_559L, result);
+    }
+
+    @Test
+    void toJsonValue_withPlcUlint_returnsUnsignedBigInteger() {
+        // Above Long.MAX_VALUE, so only a BigInteger keeps the value intact
+        BigInteger big = new BigInteger("18446744073709551000");
+        Object result = PlcValueConverter.toJsonValue(new PlcULINT(big));
+        assertInstanceOf(BigInteger.class, result);
+        assertEquals(big, result);
+    }
+
+    @Test
+    void toJsonValue_withPlcLword_returnsUnsignedBigInteger() {
+        BigInteger big = new BigInteger("0123456789ABCDEF", 16);
+        Object result = PlcValueConverter.toJsonValue(new PlcLWORD(big));
+        assertInstanceOf(BigInteger.class, result);
+        assertEquals(big, result);
     }
 
     @Test
@@ -201,4 +235,18 @@ class PlcValueConverterTest {
         assertEquals("List", PlcValueConverter.getTypeName(new PlcList()));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void toJsonValue_withPlcRawByteArray_returnsUnsignedIntList() {
+        // Used to serialize as the Java array's default toString (e.g. "[B@363f783e")
+        Object result = PlcValueConverter.toJsonValue(
+            new PlcRawByteArray(new byte[]{(byte) 0xDE, (byte) 0xAD, 0x12, 0x00}));
+        assertInstanceOf(List.class, result);
+        assertEquals(List.of(222, 173, 18, 0), (List<Integer>) result);
+    }
+
+    @Test
+    void toJsonValue_withEmptyPlcRawByteArray_returnsEmptyList() {
+        assertEquals(List.of(), PlcValueConverter.toJsonValue(new PlcRawByteArray(new byte[0])));
+    }
 }
