@@ -79,16 +79,16 @@ Runtime behaviour (timeouts, connection-cache tuning, server name/version) is co
 This server hands a model the ability to sweep a network and read and write live PLC tags, so the
 defaults are the **safe posture** — an operator opts in to risk rather than out of it:
 
-| Guard-rail | Default | Effect |
-|---|---|---|
-| `security.writes.enabled` | `false` | `write_tags` is **not advertised** to the client |
-| `security.writes.allow` | `{}` | Per-device allowlist of writable tag addresses |
-| `security.discovery.enabled` | `false` | `discover_devices` is **not advertised** |
-| `security.discovery.protocols` | `[]` | Allowlist of protocols permitted to scan |
-| `security.rate-limit.enabled` | `true` | Pacing is on out of the box |
-| `security.rate-limit.per-device` | 5/s, burst 10 | Protects one controller |
-| `security.rate-limit.global` | 20/s, burst 40 | Protects the network |
-| `security.rate-limit.max-tracked-devices` | `1000` | Bounds the per-device bucket table |
+| Guard-rail                                | Default        | Effect                                           |
+|-------------------------------------------|----------------|--------------------------------------------------|
+| `security.writes.enabled`                 | `false`        | `write_tags` is **not advertised** to the client |
+| `security.writes.allow`                   | `{}`           | Per-device allowlist of writable tag addresses   |
+| `security.discovery.enabled`              | `false`        | `discover_devices` is **not advertised**         |
+| `security.discovery.protocols`            | `[]`           | Allowlist of protocols permitted to scan         |
+| `security.rate-limit.enabled`             | `true`         | Pacing is on out of the box                      |
+| `security.rate-limit.per-device`          | 5/s, burst 10  | Protects one controller                          |
+| `security.rate-limit.global`              | 20/s, burst 40 | Protects the network                             |
+| `security.rate-limit.max-tracked-devices` | `1000`         | Bounds the per-device bucket table               |
 
 A disabled capability is not registered at all rather than advertised and refused: the model never
 sees a tool it cannot use, which is both safer and cheaper than a wasted round trip. A startup log
@@ -96,14 +96,14 @@ line says which tools are absent and why.
 
 What each tool passes through:
 
-| Tool | Gate | Per-device limit | Global limit |
-|---|---|---|---|
-| `list_drivers` | — | — | — |
-| `describe_driver` | — | — | — |
-| `discover_devices` | protocol allowlist | — (no device yet) | ✓ |
-| `browse_tags` | — | ✓ | ✓ |
-| `read_tags` | — | ✓ | ✓ |
-| `write_tags` | writes enabled, then tag allowlist | ✓ | ✓ |
+| Tool               | Gate                               | Per-device limit  | Global limit |
+|--------------------|------------------------------------|-------------------|--------------|
+| `list_drivers`     | —                                  | —                 | —            |
+| `describe_driver`  | —                                  | —                 | —            |
+| `discover_devices` | protocol allowlist                 | — (no device yet) | ✓           |
+| `browse_tags`      | —                                  | ✓                | ✓           |
+| `read_tags`        | —                                  | ✓                | ✓           |
+| `write_tags`       | writes enabled, then tag allowlist | ✓                | ✓           |
 
 **Discovery is a network scan.** PLC4X discovery is broadcast and multicast traffic, restricted or
 forbidden on many plant networks, so the control is an allowlist of protocols permitted to scan —
@@ -191,13 +191,13 @@ A guard-rail answers in the result rather than as a transport error, so the mode
 can act on. Every refusal carries a `reason`; only a rate limit carries `retryAfterMillis`, because
 only a rate limit is worth retrying unchanged.
 
-| `reason` | Meaning | What helps |
-|---|---|---|
-| `WRITES_DISABLED` | Writing is off on this server | Enable it in config; retrying will not help |
-| `TAG_NOT_ALLOWED` | Writing is on, but not at these addresses | Write an allowlisted address, or widen `allow` |
-| `DISCOVERY_DISABLED` | Discovery is off on this server | Enable it and allowlist protocols |
-| `PROTOCOL_NOT_ALLOWED` | Discovery is on, but not for this protocol | Use an allowlisted protocol |
-| `RATE_LIMITED` | Permitted, but too fast | Wait `retryAfterMillis` and retry |
+| `reason`               | Meaning                                    | What helps                                     |
+|------------------------|--------------------------------------------|------------------------------------------------|
+| `WRITES_DISABLED`      | Writing is off on this server              | Enable it in config; retrying will not help    |
+| `TAG_NOT_ALLOWED`      | Writing is on, but not at these addresses  | Write an allowlisted address, or widen `allow` |
+| `DISCOVERY_DISABLED`   | Discovery is off on this server            | Enable it and allowlist protocols              |
+| `PROTOCOL_NOT_ALLOWED` | Discovery is on, but not for this protocol | Use an allowlisted protocol                    |
+| `RATE_LIMITED`         | Permitted, but too fast                    | Wait `retryAfterMillis` and retry              |
 
 ```json
 { "error": "Write refused: %DB11.DBW0:INT not writable on 10.0.0.5. Nothing was written. See toddysoft.mcp.security.writes.allow.",
@@ -229,15 +229,23 @@ driver catalogue is listed in the [PLC4X documentation](https://plc4x.apache.org
 ## About ToddySoft Connect
 
 **ToddySoft Connect** is a commercial suite of industrial-protocol drivers built on the
-Apache PLC4X foundation — twenty drivers behind the same `PlcConnection` interface, each licensed
+Apache PLC4X foundation — twenty-one drivers behind the same `PlcConnection` interface, each licensed
 per driver code. Alongside the open-source protocols it adds drivers, hardening, bug-fixes, and
 long-term support that go beyond the Apache project — additional protocols and vendor variants,
 security-focused fixes, and a pooling connection cache with recovery. This MCP server is the same
 server ToddySoft ships on top of that suite, published here in an open-source form that runs on the
 Apache PLC4X drivers instead.
 
-Three things are worth separating out, because they are not "more protocols" and are the part an
-AI-facing tool feels most directly:
+**New in 1.3.0: a full OPC UA client driver.** Until 1.3.0 the commercial suite had no OPC UA
+`PlcDriver` at all and this open-source edition was the only one of the two that could open an OPC UA
+connection. That gap is closed: `opcua` is now a first-class driver — read, write, browse, native
+subscriptions (change-of-state, cyclic and events), server-defined structures, method calls and
+historical reads over `opc.tcp` — with the OPC 10000-6 §6.7 security stack **on by default** rather
+than as an opt-in. Details in the [driver table](#differences-between-apache-plc4x-and-toddysoft-connect)
+below.
+
+Three further things are worth separating out, because they are not "more protocols" and are the part
+an AI-facing tool feels most directly:
 
 - **Devices can be diagnosed, and some problems mitigated.** Every driver reports *how far* a
   connection attempt got rather than whether it worked, and a driver that can prepare an
@@ -263,9 +271,10 @@ suite is built on the same PLC4X foundation, but adds protocols PLC4X does not c
 extends several of the drivers PLC4X shares. The tables below summarize how the two compare,
 driver by driver — only fully-implemented drivers are listed.
 
-> **Versions compared:** **ToddySoft Connect 1.2.0** (released 2026-09-10) against **Apache PLC4X
-> 1.0.0** (the version this project builds on, set as `plc4x.version` in `pom.xml`). Rows marked
-> *new in 1.2.0* changed in that release; everything else predates it.
+> **Versions compared:** **ToddySoft Connect 1.3.0** (in preparation; 1.2.0 released 2026-09-10)
+> against **Apache PLC4X 1.0.0** (the version this project builds on, set as `plc4x.version` in
+> `pom.xml`). Rows marked *new in 1.3.0* or *new in 1.2.0* changed in that release; everything else
+> predates it.
 
 **Protocols ToddySoft Connect drives that Apache PLC4X does not:**
 
@@ -288,29 +297,30 @@ its own `slmp` driver — so that hardware is served by both, under different na
 
 **Where both suites have a driver — what the commercial edition adds:**
 
-| Protocol                                        | Apache PLC4X                                         | ToddySoft Connect adds                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-|-------------------------------------------------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **S7**                                          | Classic S7comm (`0x32`) to S7-300/400/1200/1500      | A working **S7CommPlus** stack: **V3/TLS** to S7-1500 & S7-1200 G2, **password authentication**, native **cyclic subscriptions**, **alarming**, online browse, and a `min-protocol`/`max-protocol` security window (plaintext-downgrade protection); plus an optimizer that greatly improves write performance                                                                                                                                                                    |
-| **ADS** (Beckhoff)                              | Symbol read/write/browse/subscribe against TwinCAT 3 | **TwinCAT 2** connectivity (PLC4X targets TwinCAT 3 only); reads **large symbol and data-type tables** that exceed a single ADS read, via automatic chunked uploads — needed on big PLC programs; **AoE** — EtherCAT slave telemetry (identity, AL state, CRC/frame counters, TwinSAFE FSoE) over the same ADS link; **TLS** transport; symbol-table reload; **route registration as an explicit setup operation** rather than part of every connect (*new in 1.2.0* — see below) |
-| **UMAS** (Schneider Modicon)                    | Basic driver                                         | A much more complete UMAS implementation — reads and writes, subscriptions, and array / structure addressing                                                                                                                                                                                                                                                                                                                                                                      |
-| **EtherNet/IP** (Allen-Bradley)                 | Read/write by symbolic tag                           | **Online tag browsing** of Allen-Bradley Logix controllers — discovers controller-scoped and program-scoped tags via the CIP Symbol object (class `0x6B`), cached for O(1) symbolic-name resolution                                                                                                                                                                                                                                                                               |
-| **Modbus**                                      | Read/write with the standard function codes          | Optimizers on both sides — an optimizer that greatly improves write performance, and, *new in 1.2.0*, a read optimizer that sends a multi-tag read as the chunks it produced                                                                                                                                                                                                                                                                                                      |
-| **KNXnet/IP**, **IEC 60870-5-104**, **Firmata** | Full drivers                                         | Essentially on par — maintained ports on the shared ToddySoft licensing, connection-cache and audit-log infrastructure (KNXnet/IP, like PLC4X, refreshes its manufacturer-ID table at build time)                                                                                                                                                                                                                                                                                 |
+| Protocol                                        | Apache PLC4X                                         | ToddySoft Connect adds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+|-------------------------------------------------|------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **OPC UA** (*new in 1.3.0*)                     | Read/write/browse/subscribe over `opc.tcp`           | A client driver written against OPC 10000-6, where PLC4X's is the long-standing open-source one. **Security is on by default**: a signing-and-encrypting policy, a client certificate generated into a persistent key store with a SAN URI matching `application-uri`, and a server certificate **refused** unless trusted — an unprotected channel, or a password over one, needs `allow-insecure=true` spelled out. Adds **server-defined structures** as `PlcStruct` values, read, written *and subscribed*, with an unresolvable layout reported as `UNSUPPORTED` rather than as a silent null; **event subscriptions** with named fields; **method calls** and **historical reads**; and a browse bounded in items, continuations and depth. Validated on an S7-1500, an S7-1200 and an S7-1200 G2. **PubSub** (UADP over UDP multicast) rides along as a subscribe mode of the same connection, but is **incomplete and unproven on a controller** — secured NetworkMessages, the JSON mapping and the MQTT/AMQP bindings are not implemented. The tag grammar is **deliberately incompatible** with the PLC4X driver's — `ns=2;s=Var[0..4]:INT`, a `:TYPE` suffix with the array selection before it — so migrating is a rewrite of addresses, not a drop-in |
+| **S7**                                          | Classic S7comm (`0x32`) to S7-300/400/1200/1500      | A working **S7CommPlus** stack: **V3/TLS** to S7-1500 & S7-1200 G2, **password authentication**, native **cyclic subscriptions**, **alarming**, online browse, and a `min-protocol`/`max-protocol` security window (plaintext-downgrade protection); plus an optimizer that greatly improves write performance                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **ADS** (Beckhoff)                              | Symbol read/write/browse/subscribe against TwinCAT 3 | **TwinCAT 2** connectivity (PLC4X targets TwinCAT 3 only); reads **large symbol and data-type tables** that exceed a single ADS read, via automatic chunked uploads — needed on big PLC programs; **AoE** — EtherCAT slave telemetry (identity, AL state, CRC/frame counters, TwinSAFE FSoE) over the same ADS link; **TLS** transport; symbol-table reload; **route registration as an explicit setup operation** rather than part of every connect (*new in 1.2.0* — see below)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **UMAS** (Schneider Modicon)                    | Basic driver                                         | A much more complete UMAS implementation — reads and writes, subscriptions, and array / structure addressing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **EtherNet/IP** (Allen-Bradley)                 | Read/write by symbolic tag                           | **Online tag browsing** of Allen-Bradley Logix controllers — discovers controller-scoped and program-scoped tags via the CIP Symbol object (class `0x6B`), cached for O(1) symbolic-name resolution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Modbus**                                      | Read/write with the standard function codes          | Optimizers on both sides — an optimizer that greatly improves write performance, and, *new in 1.2.0*, a read optimizer that sends a multi-tag read as the chunks it produced                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **KNXnet/IP**, **IEC 60870-5-104**, **Firmata** | Full drivers                                         | Essentially on par — maintained ports on the shared ToddySoft licensing, connection-cache and audit-log infrastructure (KNXnet/IP, like PLC4X, refreshes its manufacturer-ID table at build time)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 **Protocols Apache PLC4X drives that ToddySoft Connect does not:** the open-source suite is
 broader in a few areas, and for these this edition is the one to use.
 
 | Protocol / driver                         | What it is                                                         |
 |-------------------------------------------|--------------------------------------------------------------------|
-| **OPC UA** (`opcua`)                      | OPC UA client — read/write/browse/subscribe against OPC UA servers |
 | **Allen-Bradley DF1 / AB-ETH** (`ab-eth`) | Legacy Allen-Bradley PLCs over Ethernet                            |
 | **Omron FINS**                            | Omron controllers over the FINS protocol                           |
 | **CANopen / raw CAN** (`canopen`, `can`)  | CANopen and raw CAN bus access                                     |
 
-For OPC UA the gap is narrower than it looks and still real: ToddySoft Connect ships the OPC UA
-**wire layer** — as it does for BACnet/IP, CC-Link, FOCAS and IO-Link — but no `PlcDriver` stands
-behind any of them, so no connection can be opened with them. For those protocols this edition is
-the one that talks to a device.
+OPC UA was on that list until 1.3.0 — the commercial suite shipped the wire layer and no driver
+behind it — and no longer is. ToddySoft Connect still ships **wire layers only** for BACnet/IP,
+CC-Link, FOCAS and IO-Link: no `PlcDriver` stands behind any of them, so no connection can be opened
+with them. For those protocols, and for the ones in the table above, this edition is the one that
+talks to a device.
 
 Every ToddySoft driver additionally rides the suite's shared infrastructure: the pooling
 connection cache with recovery, the audit log, and per-driver licensing. Two capability APIs sit on top
